@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Security Incident Command Center</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #050810;
+    --surface: #0a0f1e;
+    --surface2: #0f1628;
+    --border: #1a2640;
+    --accent: #00d4ff;
+    --accent2: #0066ff;
+    --p1: #ff2244;
+    --p2: #ff7700;
+    --p3: #ffcc00;
+    --p4: #00dd66;
+    --text: #c8d8f0;
+    --text-dim: #4a6080;
+    --mono: Consolas, monospace;
+    --sans: 'Calibri', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 33px;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+  /* ── SCANLINE OVERLAY ─────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,212,255,0.015) 2px,
+      rgba(0,212,255,0.015) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── HEADER ───────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 32px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(5,8,16,0.95);
+    backdrop-filter: blur(20px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    border: 2px solid var(--accent);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    box-shadow: 0 0 16px rgba(0,212,255,0.3);
+    animation: pulse-border 3s infinite;
+  }
+
+  @keyframes pulse-border {
+    0%, 100% { box-shadow: 0 0 16px rgba(0,212,255,0.3); }
+    50% { box-shadow: 0 0 28px rgba(0,212,255,0.7); }
+  }
+
+  .logo-text h1 {
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .logo-text p {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  .header-status {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .status-dot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--p4);
+  }
+
+  .status-dot::before {
+    content: '';
+    width: 8px; height: 8px;
+    background: var(--p4);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--p4);
+    animation: blink 2s infinite;
+  }
+
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  #clock {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  /* ── LAYOUT ───────────────────────────────────── */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 280px 1fr 340px;
+    grid-template-rows: auto 1fr;
+    gap: 0;
+    height: calc(100vh - 65px);
+  }
+
+  /* ── PANELS ───────────────────────────────────── */
+  .panel {
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panel-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .panel-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .panel-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 2px;
+    color: var(--text-dim);
+  }
+
+  .panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  /* ── LEFT: STATS + SIMULATE ───────────────────── */
+  .left-panel { grid-column: 1; grid-row: 1 / 3; }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 14px 12px;
+    border-radius: 4px;
+    text-align: center;
+    transition: border-color 0.3s;
+  }
+
+  .stat-card:hover { border-color: var(--accent2); }
+
+  .stat-value {
+    font-family: var(--mono);
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .stat-card.critical .stat-value { color: var(--p1); text-shadow: 0 0 12px var(--p1); }
+  .stat-card.high .stat-value     { color: var(--p2); text-shadow: 0 0 12px var(--p2); }
+  .stat-card.medium .stat-value   { color: var(--p3); text-shadow: 0 0 12px var(--p3); }
+  .stat-card.low .stat-value      { color: var(--p4); text-shadow: 0 0 12px var(--p4); }
+  .stat-card.total .stat-value    { color: var(--accent); text-shadow: 0 0 12px var(--accent); }
+
+  .simulate-btn {
+    width: 100%;
+    padding: 14px;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+
+  .simulate-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--accent);
+    transform: translateX(-100%);
+    transition: transform 0.3s;
+    opacity: 0.1;
+  }
+
+  .simulate-btn:hover::before { transform: translateX(0); }
+  .simulate-btn:hover { box-shadow: 0 0 20px rgba(0,212,255,0.3); }
+  .simulate-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .category-list { margin-top: 16px; }
+
+  .category-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+
+  .category-bar {
+    height: 3px;
+    background: var(--accent2);
+    border-radius: 2px;
+    transition: width 0.5s;
+    margin-top: 4px;
+  }
+
+  /* ── CENTER: INCIDENT FEED ────────────────────── */
+  .center-panel {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ticket-feed { flex: 1; overflow-y: auto; padding: 12px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+  .ticket-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--text-dim);
+    border-radius: 4px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    animation: slideIn 0.3s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .ticket-card:hover { border-color: var(--accent); background: var(--surface2); }
+  .ticket-card.active { border-color: var(--accent) !important; background: var(--surface2); }
+
+  .ticket-card[data-sev="P1"] { border-left-color: var(--p1); }
+  .ticket-card[data-sev="P2"] { border-left-color: var(--p2); }
+  .ticket-card[data-sev="P3"] { border-left-color: var(--p3); }
+  .ticket-card[data-sev="P4"] { border-left-color: var(--p4); }
+
+  .ticket-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .ticket-id {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .sev-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 2px;
+    letter-spacing: 1px;
+  }
+
+  .sev-badge[data-sev="P1"] { background: rgba(255,34,68,0.2); color: var(--p1); border: 1px solid var(--p1); }
+  .sev-badge[data-sev="P2"] { background: rgba(255,119,0,0.2); color: var(--p2); border: 1px solid var(--p2); }
+  .sev-badge[data-sev="P3"] { background: rgba(255,204,0,0.2); color: var(--p3); border: 1px solid var(--p3); }
+  .sev-badge[data-sev="P4"] { background: rgba(0,221,102,0.2); color: var(--p4); border: 1px solid var(--p4); }
+
+  .ticket-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+    line-height: 1.3;
+  }
+
+  .ticket-meta {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .meta-chip {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .meta-chip span { color: var(--text); }
+
+  /* ── RIGHT: DETAIL PANEL ──────────────────────── */
+  .right-panel {
+    grid-column: 3;
+    grid-row: 1 / 3;
+    border-right: none;
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .detail-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .detail-section-title {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+
+  .detail-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+
+  .detail-key {
+    font-family: var(--mono);
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+
+  .detail-val {
+    font-family: var(--mono);
+    color: var(--text);
+    font-size: 11px;
+    text-align: right;
+    max-width: 180px;
+    word-break: break-all;
+  }
+
+  .trace-line {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    padding: 4px 0;
+    border-left: 2px solid var(--border);
+    padding-left: 10px;
+    margin-bottom: 4px;
+    line-height: 1.5;
+  }
+
+  .trace-line.node { color: var(--accent2); border-left-color: var(--accent2); }
+  .trace-line.result { color: var(--p4); border-left-color: var(--p4); }
+
+  .notify-chip {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    margin: 2px;
+    color: var(--text);
+    background: var(--bg);
+  }
+
+  .timeline-item {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    font-size: 11px;
+  }
+
+  .timeline-time {
+    font-family: var(--mono);
+    color: var(--text-dim);
+    font-size: 10px;
+    flex-shrink: 0;
+    width: 60px;
+  }
+
+  .timeline-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent2);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .sla-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+
+  .sla-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--p4), var(--p3));
+    border-radius: 2px;
+    transition: width 1s;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-dim);
+    gap: 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .empty-state .icon { font-size: 48px; opacity: 0.3; }
+
+  /* ── TOAST ────────────────────────────────────── */
+  #toast-container {
+    position: fixed;
+    top: 80px;
+    right: 24px;
+    z-index: 9998;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .toast {
+    padding: 12px 18px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 11px;
+    max-width: 320px;
+    animation: toastIn 0.3s ease;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  .toast.p1 { border-left-color: var(--p1); }
+  .toast.p2 { border-left-color: var(--p2); }
+  .toast.p3 { border-left-color: var(--p3); }
+
+  /* ── DECISION TREE VIZ ────────────────────────── */
+  .tree-node {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin: 6px 0;
+    font-family: var(--mono);
+    font-size: 10px;
+    position: relative;
+  }
+
+  .tree-node.active-node {
+    border-color: var(--accent);
+    background: rgba(0,212,255,0.08);
+    color: var(--accent);
+  }
+
+  .tree-node.result-node {
+    border-color: var(--p4);
+    color: var(--p4);
+  }
+
+  .ws-indicator {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .ws-indicator.connected { color: var(--p4); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    <div class="logo-text">
+      <h1>Security Incident Command</h1>
+      <p>NIST SP 800-61r2 // Automated Response Workflow</p>
+    </div>
+  </div>
+  <div class="header-status">
+    <div class="status-dot" id="ws-status">OFFLINE</div>
+    <div id="clock"></div>
+  </div>
+</header>
+
+<div class="main-grid">
+
+  <!-- ── LEFT: STATS + CONTROLS ─────────────────── -->
+  <div class="panel left-panel">
+    <div class="panel-header">
+      <span class="panel-title">System Overview</span>
+    </div>
+    <div class="panel-body">
+      <div class="stat-grid">
+        <div class="stat-card total">
+          <div class="stat-value" id="stat-total">0</div>
+          <div class="stat-label">Total</div>
+        </div>
+        <div class="stat-card critical">
+          <div class="stat-value" id="stat-p1">0</div>
+          <div class="stat-label">Critical</div>
+        </div>
+        <div class="stat-card high">
+          <div class="stat-value" id="stat-p2">0</div>
+          <div class="stat-label">High</div>
+        </div>
+        <div class="stat-card medium">
+          <div class="stat-value" id="stat-p3">0</div>
+          <div class="stat-label">Medium</div>
+        </div>
+        <div class="stat-card low">
+          <div class="stat-value" id="stat-p4">0</div>
+          <div class="stat-label">Low</div>
+        </div>
+      </div>
+
+      <button class="simulate-btn" id="sim-btn" onclick="simulateAlert()">
+        ⚡ Simulate Alert
+      </button>
+
+      <div class="panel-title" style="margin-bottom:10px;">By Category</div>
+      <div class="category-list" id="category-list">
+        <div class="empty-state" style="height:80px;font-size:11px;">No data yet</div>
+      </div>
+
+      <div class="panel-title" style="margin: 20px 0 10px;">Decision Tree</div>
+      <div id="tree-viz" style="font-size:10px; font-family:var(--mono); color:var(--text-dim);">
+        <div style="padding:8px; border:1px solid var(--border); border-radius:4px; text-align:center;">
+          Select an incident to view decision trace
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CENTER: INCIDENT FEED ──────────────────── -->
+  <div class="center-panel">
+    <div class="panel-header">
+      <span class="panel-title">Incident Feed</span>
+      <span class="panel-badge" id="feed-count">0 incidents</span>
+    </div>
+    <div class="ticket-feed" id="ticket-feed">
+      <div class="empty-state">
+        <div class="icon">🛡</div>
+        <div>No incidents detected</div>
+        <div style="font-size:10px;opacity:0.5">Click "Simulate Alert" to generate a test incident</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RIGHT: DETAIL ──────────────────────────── -->
+  <div class="right-panel">
+    <div class="panel-header">
+      <span class="panel-title">Incident Detail</span>
+    </div>
+    <div id="detail-pane" style="flex:1;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent;">
+      <div class="empty-state" style="height:100%;">
+        <div class="icon">📋</div>
+        <div>Select an incident</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+// ── STATE ──────────────────────────────────────────
+const API = window.location.origin;
+let ws = null;
+let incidents = [];
+let selectedId = null;
+
+// ── CLOCK ──────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toUTCString().slice(5, 25) + ' UTC';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── WEBSOCKET ──────────────────────────────────────
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+  ws.onopen = () => {
+    document.getElementById('ws-status').textContent = 'LIVE';
+    document.getElementById('ws-status').classList.add('connected');
+  };
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.event === 'init') {
+      incidents = msg.data.tickets || [];
+      updateStats(msg.data.stats || {});
+      renderFeed();
+    } else if (msg.event === 'new_incident') {
+      const ticket = msg.data.ticket;
+      incidents.unshift(ticket);
+      updateStats(computeStats());
+      renderFeed();
+      showToast(ticket);
+    } else if (msg.event === 'ticket_updated') {
+      const idx = incidents.findIndex(t => t.id === msg.data.id);
+      if (idx >= 0) incidents[idx] = msg.data;
+      if (selectedId === msg.data.id) renderDetail(msg.data);
+    }
+  };
+
+  ws.onclose = () => {
+    document.getElementById('ws-status').textContent = 'OFFLINE';
+    document.getElementById('ws-status').classList.remove('connected');
+    setTimeout(connectWS, 3000);
+  };
+}
+
+// ── SIMULATE ───────────────────────────────────────
+async function simulateAlert() {
+  const btn = document.getElementById('sim-btn');
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+  try {
+    const r = await fetch(`${API}/api/simulate`, { method: 'POST' });
+    if (!r.ok) throw new Error('Failed');
+  } catch (e) {
+    alert('Backend not connected. Run the server first.');
+  } finally {
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = '⚡ Simulate Alert';
+    }, 1500);
+  }
+}
+
+// ── RENDER FEED ────────────────────────────────────
+function renderFeed() {
+  const feed = document.getElementById('ticket-feed');
+  document.getElementById('feed-count').textContent = `${incidents.length} incident${incidents.length !== 1 ? 's' : ''}`;
+
+  if (incidents.length === 0) {
+    feed.innerHTML = `<div class="empty-state"><div class="icon">🛡</div><div>No incidents detected</div><div style="font-size:10px;opacity:0.5">Click "Simulate Alert" to generate a test incident</div></div>`;
+    return;
+  }
+
+  feed.innerHTML = incidents.map(t => `
+    <div class="ticket-card${t.id === selectedId ? ' active' : ''}" data-sev="${t.severity}" onclick="selectTicket('${t.id}')">
+      <div class="ticket-top">
+        <span class="ticket-id">${t.id}</span>
+        <span class="sev-badge" data-sev="${t.severity}">${t.severity}/${t.severity_label}</span>
+      </div>
+      <div class="ticket-title">${t.title}</div>
+      <div class="ticket-meta">
+        <div class="meta-chip">Type: <span>${t.alert_type}</span></div>
+        <div class="meta-chip">Target: <span>${t.target}</span></div>
+        <div class="meta-chip">Risk: <span>${t.risk_score}/100</span></div>
+        <div class="meta-chip">SLA: <span>${t.sla_minutes}m</span></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── SELECT TICKET ──────────────────────────────────
+function selectTicket(id) {
+  selectedId = id;
+  const ticket = incidents.find(t => t.id === id);
+  if (!ticket) return;
+  renderFeed();
+  renderDetail(ticket);
+  renderDecisionTree(ticket.decision_trace || []);
+}
+
+// ── RENDER DETAIL ──────────────────────────────────
+function renderDetail(t) {
+  const pane = document.getElementById('detail-pane');
+  const sevColor = { P1: 'var(--p1)', P2: 'var(--p2)', P3: 'var(--p3)', P4: 'var(--p4)' }[t.severity] || 'var(--text)';
+
+  const escalationPath = (t.escalation_path || []).map(step =>
+    `<div style="font-family:var(--mono);font-size:10px;padding:4px 0;border-bottom:1px solid var(--border);color:var(--text-dim);">${escHtml(step)}</div>`
+  ).join('');
+
+  const notifiedHTML = (t.notified_parties || []).map(n =>
+    `<span class="notify-chip">${n}</span>`
+  ).join('');
+
+  const notifSent = (t.notifications_sent || []).map(n =>
+    `<div style="font-family:var(--mono);font-size:9px;padding:4px;border-bottom:1px solid var(--border);color:var(--text-dim);">
+      <span style="color:var(--p4)">✓</span> ${n.channel.toUpperCase()} → ${n.recipient}
+    </div>`
+  ).join('');
+
+  const timelineHTML = (t.timeline || []).map(e => `
+    <div class="timeline-item">
+      <div class="timeline-time">${new Date(e.timestamp).toTimeString().slice(0,8)}</div>
+      <div class="timeline-dot"></div>
+      <div style="flex:1;font-family:var(--mono);font-size:10px;color:var(--text-dim);line-height:1.5;">${escHtml(e.details || e.action)}</div>
+    </div>
+  `).join('');
+
+  pane.innerHTML = `
+    <div class="detail-section">
+      <div style="font-family:var(--mono);font-size:18px;font-weight:600;color:${sevColor};margin-bottom:4px;">${t.severity}/${t.severity_label}</div>
+      <div style="font-size:12px;color:var(--text);margin-bottom:8px;line-height:1.4;">${escHtml(t.title)}</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);">${t.id}</div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">Alert Details</div>
+      ${row('Type', t.alert_type)}
+      ${row('Source IP', t.source_ip)}
+      ${row('Target', t.target)}
+      ${row('Detected by', t.source_system)}
+      ${row('Category', t.category)}
+      ${row('Risk Score', `${t.risk_score}/100`)}
+      ${row('SLA', `${t.sla_minutes} minutes`)}
+      ${row('Status', t.status)}
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">Notified Parties</div>
+      <div>${notifiedHTML || '<span style="font-family:var(--mono);font-size:10px;color:var(--text-dim);">None yet</span>'}</div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">Escalation Path</div>
+      <div>${escalationPath || '<span style="font-family:var(--mono);font-size:10px;color:var(--text-dim);">Not determined</span>'}</div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">Notifications Sent (${(t.notifications_sent || []).length})</div>
+      <div>${notifSent || '<span style="font-family:var(--mono);font-size:10px;color:var(--text-dim);">None</span>'}</div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">Timeline</div>
+      <div>${timelineHTML}</div>
+    </div>
+  `;
+}
+
+function row(k, v) {
+  return `<div class="detail-row"><span class="detail-key">${k}</span><span class="detail-val">${escHtml(String(v))}</span></div>`;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── DECISION TREE VIZ ──────────────────────────────
+function renderDecisionTree(trace) {
+  const el = document.getElementById('tree-viz');
+  if (!trace || trace.length === 0) return;
+
+  el.innerHTML = trace.map(line => {
+    const isNode = line.startsWith('NODE');
+    const isResult = line.trim().startsWith('→');
+    let cls = '';
+    if (isNode) cls = 'active-node';
+    if (isResult && (line.includes('CRITICAL') || line.includes('HIGH') || line.includes('MEDIUM') || line.includes('LOW'))) cls = 'result-node';
+    return `<div class="tree-node ${cls}">${escHtml(line)}</div>`;
+  }).join('');
+}
+
+// ── STATS ──────────────────────────────────────────
+function computeStats() {
+  const stats = { by_severity: {}, by_category: {}, total: incidents.length };
+  incidents.forEach(t => {
+    stats.by_severity[t.severity_label] = (stats.by_severity[t.severity_label] || 0) + 1;
+    stats.by_category[t.category] = (stats.by_category[t.category] || 0) + 1;
+  });
+  return stats;
+}
+
+function updateStats(stats) {
+  document.getElementById('stat-total').textContent = stats.total || 0;
+  document.getElementById('stat-p1').textContent = (stats.by_severity || {})['CRITICAL'] || 0;
+  document.getElementById('stat-p2').textContent = (stats.by_severity || {})['HIGH'] || 0;
+  document.getElementById('stat-p3').textContent = (stats.by_severity || {})['MEDIUM'] || 0;
+  document.getElementById('stat-p4').textContent = (stats.by_severity || {})['LOW'] || 0;
+
+  const cats = stats.by_category || {};
+  const total = stats.total || 1;
+  const catEl = document.getElementById('category-list');
+  const entries = Object.entries(cats).sort((a,b) => b[1]-a[1]);
+
+  if (entries.length === 0) {
+    catEl.innerHTML = '<div class="empty-state" style="height:80px;font-size:11px;">No data yet</div>';
+    return;
+  }
+
+  catEl.innerHTML = entries.map(([cat, cnt]) => `
+    <div class="category-item">
+      <div>
+        <div>${cat}</div>
+        <div class="category-bar" style="width:${Math.round(cnt/total*100)}px;"></div>
+      </div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--text);">${cnt}</div>
+    </div>
+  `).join('');
+}
+
+// ── TOAST ──────────────────────────────────────────
+function showToast(ticket) {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  const sevClass = { CRITICAL:'p1', HIGH:'p2', MEDIUM:'p3', LOW:'p4' }[ticket.severity_label] || '';
+  toast.className = `toast ${sevClass}`;
+  toast.innerHTML = `
+    <div style="color:${ticket.severity_color};margin-bottom:4px;">🚨 ${ticket.severity}/${ticket.severity_label} — New Incident</div>
+    <div style="color:var(--text);margin-bottom:4px)">${ticket.title}</div>
+    <div style="color:var(--text-dim)">${ticket.id}</div>
+  `;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 6000);
+}
+
+// ── INIT ───────────────────────────────────────────
+connectWS();
+</script>
+</body>
+</html>
